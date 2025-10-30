@@ -15,3 +15,10 @@
 ## Env
 
 Create `.env.local`:
+
+- NEXT_PUBLIC_API_URL = http://localhost:8000
+
+## Build
+
+- `npm run build` → `.next/`
+- `npm start`
