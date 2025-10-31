@@ -3,32 +3,25 @@ from io import BytesIO
 from docx import Document
 
 def extract_placeholders(file_bytes: bytes):
-    """
-    Extract all unique placeholders in {{placeholder}} format from a .docx file.
-    Returns a list of unique placeholder names in order of appearance.
-    """
-    try:
-        doc = Document(BytesIO(file_bytes))
-        placeholders = []
+    """Extract placeholders from a Word doc (supports {{ }} and [ ] formats)."""
+    document = Document(BytesIO(file_bytes))
+    text = []
+    for para in document.paragraphs:
+        text.append(para.text)
+    combined = "\n".join(text)
 
-        # regex to detect {{placeholder}}
-        pattern = r"{{(.*?)}}"
+    # Match {{Placeholder}} and [Placeholder]
+    found = re.findall(r"\{\{(.*?)\}\}|\[(.*?)\]", combined)
 
-        for para in doc.paragraphs:
-            matches = re.findall(pattern, para.text)
-            for match in matches:
-                if match not in placeholders:
-                    placeholders.append(match.strip())
+    # Flatten and clean both types
+    placeholders = [f[0] or f[1] for f in found]
 
-        # optional: handle tables (if document includes placeholders in cells)
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    matches = re.findall(pattern, cell.text)
-                    for match in matches:
-                        if match not in placeholders:
-                            placeholders.append(match.strip())
-
-        return placeholders
-    except Exception as e:
-        raise RuntimeError(f"Error extracting placeholders: {str(e)}")
+    # Normalize to underscores instead of spaces
+    normalized = []
+    seen = set()
+    for ph in placeholders:
+        clean = ph.strip().replace(" ", "_")
+        if clean and clean not in seen:
+            normalized.append(clean)
+            seen.add(clean)
+    return normalized

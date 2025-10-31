@@ -45,10 +45,6 @@ export default function ChatPage() {
 
   async function handleSend() {
     if (!input.trim()) return;
-    if (/and/i.test(input) && currentKey.toLowerCase() !== "notes") {
-      alert("Please answer one field at a time.");
-      return;
-    }
 
     const userMsg: ChatMessage = { role: "user", content: input };
     setChat((prev) => [...prev, userMsg]);

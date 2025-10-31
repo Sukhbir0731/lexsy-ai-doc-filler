@@ -33,12 +33,17 @@ export default function PreviewPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.post("/generate", { placeholders, values: filled });
+      const fileId = localStorage.getItem("lexsy.fileId");
+      const res = await api.post("/generate", {
+        file_id: fileId,
+        placeholders,
+        values: filled,
+      });
       setFileId(res.data.file_id);
       localStorage.setItem("lexsy.fileId", res.data.file_id);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Failed to generate document.");
+      setError(err.message || "Generation failed");
     } finally {
       setLoading(false);
     }

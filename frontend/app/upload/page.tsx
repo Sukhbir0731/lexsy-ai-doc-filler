@@ -18,7 +18,6 @@ export default function UploadPage() {
     setLoading(true);
 
     try {
-      // 🧹 Clear old session data
       localStorage.removeItem("lexsy.placeholders");
       localStorage.removeItem("lexsy.values");
       localStorage.removeItem("lexsy.fileId");
@@ -35,7 +34,8 @@ export default function UploadPage() {
         throw new Error("No placeholders found in document.");
       }
 
-      // 🆕 Save new placeholders for chat
+      localStorage.setItem("lexsy.fileId", res.data.file_id);
+
       localStorage.setItem("lexsy.placeholders", JSON.stringify(placeholders));
       localStorage.setItem("lexsy.values", JSON.stringify({}));
 

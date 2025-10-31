@@ -5,7 +5,7 @@ from utils.parse_docx import extract_placeholders
 from utils.fill_placeholders import fill_placeholders_in_docx
 from utils.ai_helper import get_ai_response
 import uuid
-import os
+import os, json
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
 from typing import List, Dict, Optional
@@ -23,8 +23,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TMP_DIR = "tmp"
-os.makedirs(TMP_DIR, exist_ok=True)
+UPLOAD_DIR = "backend/tmp"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 class GeneratePayload(BaseModel):
@@ -39,13 +39,18 @@ def health_check():
 
 
 @app.post("/parse")
-async def parse_doc(file: UploadFile = File(...)):
-    try:
-        file_bytes = await file.read()
-        placeholders = extract_placeholders(file_bytes)
-        return {"placeholders": placeholders}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+async def parse_doc(file: UploadFile):
+    """Upload and extract placeholders from a new Word template."""
+    # Save unique copy
+    file_id = str(uuid.uuid4())
+    file_path = os.path.join(UPLOAD_DIR, f"{file_id}.docx")
+
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    placeholders = extract_placeholders(open(file_path, "rb").read())
+
+    return {"file_id": file_id, "placeholders": placeholders}
 
 
 @app.post("/chat")
@@ -58,46 +63,30 @@ async def chat_handler(message: str = Form(...), placeholder: str = Form(...)):
 
 
 @app.post("/generate")
-async def generate_doc(data: dict):
-    try:
-        payload = GeneratePayload(**data)
+async def generate_doc(payload: dict):
+    """Fill the placeholders in the user’s uploaded file."""
+    placeholders = payload.get("placeholders", [])
+    values = payload.get("values", {})
+    file_id = payload.get("file_id")
 
-        if not payload.values:
-            return JSONResponse(
-                content={"error": "Missing 'values' in request body."},
-                status_code=400,
-            )
+    # Ensure the file exists
+    input_path = os.path.join(UPLOAD_DIR, f"{file_id}.docx")
+    if not os.path.exists(input_path):
+        return {"error": f"Template not found for file_id: {file_id}"}
 
-        file_id = str(uuid.uuid4())
-        output_path = os.path.join(TMP_DIR, f"{file_id}.docx")
+    output_id = str(uuid.uuid4())
+    output_path = os.path.join(UPLOAD_DIR, f"{output_id}.docx")
 
-        # For MVP: always use default template (or user-provided template_path, if given)
-        fill_placeholders_in_docx(
-            placeholders=payload.placeholders,
-            values=payload.values,
-            output_path=output_path,
-            template_path=payload.template_path,  # None -> default template
-        )
+    fill_placeholders_in_docx(input_path, placeholders, values, output_path)
 
-        return {"file_id": file_id}
+    return {"file_id": output_id}
 
-    except ValidationError as ve:
-        return JSONResponse(content={"error": ve.errors()}, status_code=422)
-    except FileNotFoundError as fe:
-        return JSONResponse(content={"error": str(fe)}, status_code=404)
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 @app.get("/download/{file_id}")
-def download_file(file_id: str):
-    path = os.path.join("tmp", f"{file_id}.docx")
-
-    if os.path.exists(path):
-        return FileResponse(
-            path,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            filename="filled_document.docx",
-        )
-
-    return JSONResponse(content={"error": "File not found"}, status_code=404)
+async def download_filled_doc(file_id: str):
+    """Download the generated filled document."""
+    path = os.path.join(UPLOAD_DIR, f"{file_id}.docx")
+    if not os.path.exists(path):
+        return {"error": "File not found"}
+    return FileResponse(path, filename="filled_document.docx")

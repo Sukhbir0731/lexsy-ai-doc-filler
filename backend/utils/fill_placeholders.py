@@ -35,28 +35,20 @@ def _replace_in_tables(doc, mapping: dict):
                     for p in cell.paragraphs:
                         p.text = new_text  # MVP: simplest path
 
-def fill_placeholders_in_docx(placeholders, values: dict, output_path: str, template_path: str = None):
-    """
-    Load a .docx template and replace all {{key}} with provided values.
-    - placeholders: list[str] (unused for logic, but kept for signature parity)
-    - values: dict[str, str]
-    - output_path: where to save the generated .docx
-    - template_path: optional override; uses DEFAULT_TEMPLATE if None
-    """
-    tpl_path = template_path or DEFAULT_TEMPLATE
-    if not os.path.exists(tpl_path):
-        raise FileNotFoundError(f"Template not found at: {tpl_path}")
-
-    # Ensure output directory exists
-    out_dir = os.path.dirname(output_path)
-    if out_dir and not os.path.exists(out_dir):
-        os.makedirs(out_dir, exist_ok=True)
-
-    doc = Document(tpl_path)
-
-    # Replace in paragraphs and tables
-    _replace_in_paragraphs(doc, values)
-    _replace_in_tables(doc, values)
-
+def fill_placeholders_in_docx(input_path, placeholders, values, output_path):
+    doc = Document(input_path)
+    for p in doc.paragraphs:
+        for key in placeholders:
+            val = values.get(key, "")
+            if not val:
+                continue
+            # Replace both {{key}} and [key]
+            patterns = [
+                "{{" + key + "}}",
+                "[" + key + "]",
+                "[" + key.replace("_", " ") + "]",
+            ]
+            for pattern in patterns:
+                if pattern in p.text:
+                    p.text = p.text.replace(pattern, val)
     doc.save(output_path)
-    return output_path
