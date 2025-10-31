@@ -1,10 +1,11 @@
 // @ts-ignore
 import "./globals.css";
+// /app/layout.tsx
 import Link from "next/link";
 
 export const metadata = {
   title: "Lexsy AI Legal Assistant",
-  description: "AI Legal Document Filler MVP",
+  description: "AI-powered legal document assistant",
 };
 
 export default function RootLayout({
@@ -16,9 +17,12 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
         <header className="bg-white shadow p-4 flex justify-between items-center">
-          <h1 className="text-xl font-semibold text-blue-600">
+          <Link
+            href="/"
+            className="text-xl font-semibold text-blue-600 hover:text-blue-800"
+          >
             Lexsy AI Legal Assistant
-          </h1>
+          </Link>
           <nav className="space-x-4 text-sm font-medium">
             <Link href="/upload" className="hover:text-blue-600">
               Upload

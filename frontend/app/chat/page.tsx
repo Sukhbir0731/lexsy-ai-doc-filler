@@ -4,40 +4,133 @@ import api from "@/lib/api";
 import { useRouter } from "next/navigation";
 import Loader from "@/components/Loader";
 
+type ChatMessage = {
+  role: "user" | "ai";
+  content: string;
+};
+
 export default function ChatPage() {
-  const [placeholders, setPlaceholders] = useState<string[]>([]);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [index, setIndex] = useState(0);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [placeholders, setPlaceholders] = useState<string[]>([]);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [index, setIndex] = useState(0);
   const router = useRouter();
 
+  // Load placeholders
   useEffect(() => {
-    const stored = localStorage.getItem("placeholders");
-    if (stored) setPlaceholders(JSON.parse(stored));
-  }, []);
+    const p = localStorage.getItem("lexsy.placeholders");
+    if (!p) {
+      router.push("/upload");
+      return;
+    }
+    const parsed = JSON.parse(p);
+    setPlaceholders(parsed);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!placeholders[index]) return;
+    // start the conversation
+    setChat([
+      {
+        role: "ai",
+        content: `Thanks for uploading your document! Let's get started.`,
+      },
+      {
+        role: "ai",
+        content: `What is your ${parsed[0].replaceAll("_", " ")}?`,
+      },
+    ]);
+  }, [router]);
 
+  const currentKey = placeholders[index];
+
+  async function handleSend() {
+    if (!input.trim()) return;
+    if (/and/i.test(input) && currentKey.toLowerCase() !== "notes") {
+      alert("Please answer one field at a time.");
+      return;
+    }
+
+    const userMsg: ChatMessage = { role: "user", content: input };
+    setChat((prev) => [...prev, userMsg]);
     setLoading(true);
+
+    const cleanInput = input.trim().toLowerCase();
+
+    if (cleanInput === "yes" || cleanInput === "y") {
+      setInput("");
+
+      const form = new FormData();
+      form.append("message", input);
+      form.append("placeholder", currentKey);
+      form.append("values", JSON.stringify(values));
+
+      const res = await api.post("/chat", form);
+      const aiMsg = { role: "ai", content: res.data.response };
+      setChat((prev) => [...prev, aiMsg as ChatMessage]);
+      return;
+    }
+
+    const updated = { ...values, [currentKey]: input };
+    setValues(updated);
+    localStorage.setItem("lexsy.values", JSON.stringify(updated));
+
     try {
-      // Optional AI guidance call
-      await api.post("/chat", {
-        message: answers[placeholders[index]],
-        placeholder: placeholders[index],
-      });
-      // Move to next placeholder
+      // Call backend AI for friendly confirmation message
+      const form = new FormData();
+      form.append("message", input);
+      form.append("placeholder", currentKey);
+      form.append("values", JSON.stringify(updated));
+      const res = await api.post("/chat", form);
+      const aiResponse = res.data.response;
+
+      let aiMsg: string;
+
+      // If not the last placeholder, move to next
       if (index + 1 < placeholders.length) {
+        const nextKey = placeholders[index + 1];
+        aiMsg = `${aiResponse} What is your ${nextKey.replaceAll("_", " ")}?`;
         setIndex(index + 1);
       } else {
-        // Finished
-        localStorage.setItem("filledValues", JSON.stringify(answers));
-        router.push("/preview");
+        // Last one → summarize all values
+        const summary = Object.entries(updated)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ");
+        aiMsg = `${aiResponse} Here’s what I have:\n${summary}\nIs this information correct? (type Yes to confirm)`;
       }
+
+      setChat((prev) => [...prev, { role: "ai", content: aiMsg }]);
     } catch (err) {
       console.error(err);
-      alert("Chat error");
+      setChat((prev) => [
+        ...prev,
+        { role: "ai", content: "[AI unavailable — mock mode]" },
+      ]);
+    } finally {
+      setInput("");
+      setLoading(false);
+    }
+  }
+
+  // Detect confirmation and move to preview
+  useEffect(() => {
+    if (!chat.length) return;
+    const lastMsg = chat[chat.length - 1];
+    if (lastMsg.role === "user" && /yes/i.test(lastMsg.content.trim())) {
+      generateAndPreview();
+    }
+  }, [chat]);
+
+  async function generateAndPreview() {
+    setLoading(true);
+    try {
+      const placeholders = JSON.parse(
+        localStorage.getItem("lexsy.placeholders") || "[]"
+      );
+      const values = JSON.parse(localStorage.getItem("lexsy.values") || "{}");
+      await api.post("/generate", { placeholders, values });
+      router.push("/preview");
+    } catch (err) {
+      alert("Failed to generate document.");
     } finally {
       setLoading(false);
     }
@@ -45,36 +138,56 @@ export default function ChatPage() {
 
   if (!placeholders.length)
     return (
-      <p className="text-center text-gray-600 mt-12">No placeholders loaded.</p>
+      <p className="text-center text-gray-600 mt-12">
+        No placeholders loaded. Please upload a document first.
+      </p>
     );
 
-  const current = placeholders[index];
-
   return (
-    <div className="max-w-md mx-auto mt-12">
-      <h2 className="text-xl font-semibold mb-4 text-center">
-        Fill placeholder {index + 1} of {placeholders.length}
+    <div className="max-w-lg mx-auto mt-12 flex flex-col h-[75vh]">
+      <h2 className="text-xl font-semibold mb-3 text-center">
+        Lexsy Assistant
       </h2>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="font-medium">{current}</label>
+
+      <div className="flex-1 border rounded p-3 bg-gray-50 overflow-y-auto">
+        {chat.map((msg, i) => (
+          <div
+            key={i}
+            className={`my-2 ${
+              msg.role === "user" ? "text-right" : "text-left"
+            }`}
+          >
+            <span
+              className={`inline-block px-3 py-2 rounded-lg whitespace-pre-line ${
+                msg.role === "user"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-200 text-gray-800"
+              }`}
+            >
+              {msg.content}
+            </span>
+          </div>
+        ))}
+        {loading && <Loader />}
+      </div>
+
+      <div className="flex mt-3">
         <input
-          type="text"
-          value={answers[current] || ""}
-          onChange={(e) =>
-            setAnswers({ ...answers, [current]: e.target.value })
-          }
-          className="border rounded p-2"
-          required
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          placeholder={`Type your message...`}
+          className="flex-1 bg-black text-white border border-gray-700 rounded-l p-2 placeholder-gray-400 focus:outline-none"
         />
+
         <button
+          onClick={handleSend}
           disabled={loading}
-          type="submit"
-          className="bg-blue-600 text-white rounded p-2 hover:bg-blue-700"
+          className="bg-blue-600 text-white px-4 py-2 rounded-r hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? "Processing..." : "Next"}
+          Send
         </button>
-      </form>
-      {loading && <Loader />}
+      </div>
     </div>
   );
 }
