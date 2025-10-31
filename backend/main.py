@@ -12,25 +12,26 @@ from typing import List, Dict, Optional
 
 load_dotenv()
 
+PORT = int(os.getenv("PORT", "10000"))   # Render provides PORT env var
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "backend/tmp")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*") 
+
 app = FastAPI(title="Lexsy AI Legal Backend")
 
 # Enable CORS for frontend (Vercel + local)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=[FRONTEND_ORIGIN] if FRONTEND_ORIGIN != "*" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "backend/tmp"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-
 class GeneratePayload(BaseModel):
     placeholders: List[str] = Field(default_factory=list)
     values: Dict[str, str] = Field(default_factory=dict)
-    # optional: allow a custom template path later
     template_path: Optional[str] = None
 
 @app.get("/")
