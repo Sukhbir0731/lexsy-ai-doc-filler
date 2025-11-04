@@ -2,8 +2,8 @@
 
 Mono-repo containing:
 
-- **/frontend** — Next.js 14 (App Router, TS, Tailwind)
-- **/backend** — FastAPI (Python 3.11)
+- **/frontend** - Next.js 14 (App Router, TS, Tailwind)
+- **/backend** - FastAPI (Python 3.11)
 
 ## Quick Start
 
@@ -12,10 +12,10 @@ Mono-repo containing:
 
 ## Deploy
 
-- Frontend: Vercel (Free)
-- Backend: Render (Free)
+- Frontend: Vercel
+- Backend: Render
 
 ## Environment
 
-- `NEXT_PUBLIC_API_URL` (frontend) → your Render backend URL
-- `OPENAI_API_KEY` (backend) → OpenAI key in Render env
+- `NEXT_PUBLIC_API_URL` (frontend) → https://lexsy-ai-doc-filler.vercel.app/
+- `OPENAI_API_KEY` (backend) → https://lexsy-ai-doc-filler.onrender.com/
