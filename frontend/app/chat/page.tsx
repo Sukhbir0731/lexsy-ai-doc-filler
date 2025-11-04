@@ -18,25 +18,41 @@ export default function ChatPage() {
   const [index, setIndex] = useState(0);
   const router = useRouter();
 
-  // Load placeholders
   useEffect(() => {
     const p = localStorage.getItem("lexsy.placeholders");
     if (!p) {
       router.push("/upload");
       return;
     }
-    const parsed = JSON.parse(p);
-    setPlaceholders(parsed);
 
-    // start the conversation
+    let parsed: string[] = [];
+    try {
+      parsed = JSON.parse(p);
+    } catch {
+      router.push("/upload");
+      return;
+    }
+
+    const cleaned = parsed.filter(
+      (ph) => typeof ph === "string" && ph.trim().length > 0
+    );
+
+    if (cleaned.length === 0) {
+      router.push("/upload");
+      return;
+    }
+
+    setPlaceholders(cleaned);
+
+    const firstLabel = cleaned[0].replaceAll("_", " ");
     setChat([
       {
         role: "ai",
-        content: `Thanks for uploading your document! Let's get started.`,
+        content: "Thanks for uploading your document! Let's get started.",
       },
       {
         role: "ai",
-        content: `What is your ${parsed[0].replaceAll("_", " ")}?`,
+        content: `What is your ${firstLabel}?`,
       },
     ]);
   }, [router]);
@@ -46,48 +62,42 @@ export default function ChatPage() {
   async function handleSend() {
     if (!input.trim()) return;
 
-    const userMsg: ChatMessage = { role: "user", content: input };
-    setChat((prev) => [...prev, userMsg]);
-    setLoading(true);
+    const cleanInput = input.trim();
+    const lower = cleanInput.toLowerCase();
 
-    const cleanInput = input.trim().toLowerCase();
-
-    if (cleanInput === "yes" || cleanInput === "y") {
+    if (lower === "yes" || lower === "y") {
+      const userMsg: ChatMessage = { role: "user", content: cleanInput };
+      setChat((prev) => [...prev, userMsg]);
       setInput("");
-
-      const form = new FormData();
-      form.append("message", input);
-      form.append("placeholder", currentKey);
-      form.append("values", JSON.stringify(values));
-
-      const res = await api.post("/chat", form);
-      const aiMsg = { role: "ai", content: res.data.response };
-      setChat((prev) => [...prev, aiMsg as ChatMessage]);
+      await generateAndPreview();
       return;
     }
 
-    const updated = { ...values, [currentKey]: input };
+    const userMsg: ChatMessage = { role: "user", content: cleanInput };
+    setChat((prev) => [...prev, userMsg]);
+    setLoading(true);
+
+    const updated = { ...values, [currentKey]: cleanInput };
     setValues(updated);
     localStorage.setItem("lexsy.values", JSON.stringify(updated));
 
     try {
-      // Call backend AI for friendly confirmation message
       const form = new FormData();
-      form.append("message", input);
+      form.append("message", cleanInput);
       form.append("placeholder", currentKey);
       form.append("values", JSON.stringify(updated));
       const res = await api.post("/chat", form);
       const aiResponse = res.data.response;
 
       let aiMsg: string;
+      const nextIdx = index + 1;
 
-      // If not the last placeholder, move to next
-      if (index + 1 < placeholders.length) {
-        const nextKey = placeholders[index + 1];
-        aiMsg = `${aiResponse} What is your ${nextKey.replaceAll("_", " ")}?`;
-        setIndex(index + 1);
+      if (nextIdx < placeholders.length) {
+        const nextKey = placeholders[nextIdx];
+        const nextLabel = nextKey ? nextKey.replaceAll("_", " ") : "next field";
+        aiMsg = `${aiResponse} What is your ${nextLabel}?`;
+        setIndex(nextIdx);
       } else {
-        // Last one → summarize all values
         const summary = Object.entries(updated)
           .map(([k, v]) => `${k}: ${v}`)
           .join(", ");
@@ -107,7 +117,6 @@ export default function ChatPage() {
     }
   }
 
-  // Detect confirmation and move to preview
   useEffect(() => {
     if (!chat.length) return;
     const lastMsg = chat[chat.length - 1];
@@ -172,10 +181,9 @@ export default function ChatPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder={`Type your message...`}
+          placeholder="Type your message..."
           className="flex-1 bg-black text-white border border-gray-700 rounded-l p-2 placeholder-gray-400 focus:outline-none"
         />
-
         <button
           onClick={handleSend}
           disabled={loading}
